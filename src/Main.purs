@@ -35,8 +35,8 @@ import UI.Util as U
 foreign import click :: MEvent
 foreign import change :: MEvent
 
-
-type MyState = {clickable :: Boolean, b1Color :: String, b2Color :: String, b3Color :: String, b4Color :: String, clicked :: Boolean, clickedBox :: Int, lastClickTime :: Number}
+type BoxPattern = {pattern :: Array Int, done :: Int, correctGuesses :: Int}
+type MyState = {clickable :: Boolean, b1Color :: String, b2Color :: String, b3Color :: String, b4Color :: String, clicked :: Boolean, clickedBox :: Int, lastClickTime :: Number, boxPattern :: BoxPattern}
 
 widget :: forall a . MyState  -> VDom Attr a
 widget state = frameLayout
@@ -118,6 +118,7 @@ getBoxNum x y = if (x > ((parentWidth / 2) - boxWidth)) && (x < ((parentWidth /2
                     else 3
                 else -1
 
+selectNextBox = randomInt 1 4
 
 clickBox boxNum time = do
   _ <- case boxNum of
@@ -132,12 +133,27 @@ clickBox boxNum time = do
     3 -> U.updateState "clickedBox" 3
     4 -> U.updateState "clickedBox" 4
     _ -> U.getState
-  _ <- U.updateState "clicked" true
-  U.updateState "lastClickTime" time
+  if (boxNum == 1) || (boxNum == 2) || (boxNum == 3) || (boxNum == 4)
+    then do
+      _ <- U.updateState "clicked" true
+      _ <- U.updateState "clickable" false
+      U.updateState "lastClickTime" time
+    else U.getState
 
 
 -- mOnMouseDown :: { value :: a, pos :: Nullable { x :: Int, y :: Int } -> Eff
-evalPosition val time = clickBox (getBoxNum pos.x pos.y) time where
+evalPosition val time = do
+  (st::MyState) <- U.getState
+  if st.clickable
+    then do
+      let boxNum = getBoxNum pos.x pos.y
+      if boxNum == (unsafePartial $ fromJust $ (st.boxPattern.pattern !! st.boxPattern.correctGuesses) )
+        then do -- correctGuess
+          _ <- clickBox boxNum time -- click box
+          U.updateState "boxPattern" {pattern : st.boxPattern.pattern, done : st.boxPattern.done , correctGuesses : (st.boxPattern.correctGuesses + 1)}
+        else pure st
+
+    else clickBox (-1) time where
   pos = unsafePartial $ fromJust $ toMaybe val.pos
 
 mOnMouseDown val = evalPosition val.value val.time
@@ -152,15 +168,29 @@ resetBoxColor box = do
 
 mOnAnim a = do
   (state::MyState) <- U.getState
-  if state.clicked
+  st <- if state.clicked
     then if (time - state.lastClickTime) > 1000.0
       then do
         _ <- resetBoxColor state.clickedBox
         _ <- U.updateState "clicked" false
+        _ <- U.updateState "clickable" true
         _ <- U.updateState "clickedBox" (-1)
         U.updateState "lastClickTime" 0.0
       else U.getState
     else U.getState
+
+  if (length $ st.boxPattern.pattern) == st.boxPattern.done -- pattern already displayed to user
+    then if st.boxPattern.correctGuesses == (length st.boxPattern.pattern) -- user has guessed everything right
+      then do -- add new element into array. reset correctGuesses and done
+        newBox <- selectNextBox
+        U.updateState "boxPattern" {pattern : st.boxPattern.pattern <> [newBox], done : 0, correctGuesses : 0 }
+      else  -- look for user input. Should only get user input under this condition. basically, we're waiting for users input here
+        pure st
+    else if (not st.clicked) then do -- still more left to be displayed in pattern
+              let boxNum = unsafePartial $ fromJust $ (st.boxPattern.pattern !! st.boxPattern.done)
+              _ <- clickBox boxNum time
+              U.updateState "boxPattern" {pattern : st.boxPattern.pattern, done : (st.boxPattern.done + 1), correctGuesses : st.boxPattern.correctGuesses }
+            else pure st
   where
     time = a.time
 
@@ -177,11 +207,7 @@ listen = do
   _ <- anim `E.subscribe` mOnAnim
   U.patch widget (frameUpdate <$> box1.behavior) (anim)
 
-
-main = do
-  --- Init State {} empty record--
-  U.initializeState
-  --- Update State ----
+resetState = do
   _ <- U.updateState "b1Color" box1Color
   _ <- U.updateState "b2Color" box2Color
   _ <- U.updateState "b3Color" box3Color
@@ -189,8 +215,16 @@ main = do
   _ <- U.updateState "clicked" false
   _ <- U.updateState "clickedBox" (-1)
   _ <- U.updateState "lastClickTime" 0.0
-  state <- U.updateState "clickable" false
+  firstBox <- selectNextBox
+  _ <- U.updateState "boxPattern" {pattern : [firstBox], done : 0, correctGuesses : 0}
+  U.updateState "clickable" true  --- TODO can clickable be replaced with clicked? is clickable redundant?
 
+-- type BoxPattern = {pattern :: Array Int, done :: Int, correctGuesses :: Int}
+main = do
+  --- Init State {} empty record--
+  U.initializeState
+  --- Update State ----
+  state <- resetState
   ---  global  key value pair in your "state" (which is also global)
   ---- Render Widget ---
   U.render (widget state) listen

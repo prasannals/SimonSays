@@ -17,7 +17,7 @@ box1Color :: String
 box1Color = "#FF9800" -- orange
 
 box2Color :: String
-box2Color = "#43A047" -- green
+box2Color = "#b71c1c" -- red
 
 box3Color :: String
 box3Color = "#009688" -- teal
@@ -31,7 +31,7 @@ box1ClickedColor :: String
 box1ClickedColor = "#FFCC80"
 
 box2ClickedColor :: String
-box2ClickedColor = "#C8E6C9"
+box2ClickedColor = "#f44336"
 
 box3ClickedColor :: String
 box3ClickedColor = "#B2DFDB"
