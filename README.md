@@ -1,3 +1,5 @@
+![GamePlay](https://media.giphy.com/media/5ZXzTqZuCURJXMHUqn/giphy.gif)
+
 `yarn`
 
 `npm i`
