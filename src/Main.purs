@@ -36,7 +36,9 @@ foreign import click :: MEvent
 foreign import change :: MEvent
 
 type BoxPattern = {pattern :: Array Int, done :: Int, correctGuesses :: Int}
-type MyState = {clickable :: Boolean, b1Color :: String, b2Color :: String, b3Color :: String, b4Color :: String, clicked :: Boolean, clickedBox :: Int, lastClickTime :: Number, boxPattern :: BoxPattern}
+type Timer = {set :: Boolean, time :: Number, duration :: Number}
+type MyState = {clickable :: Boolean, b1Color :: String, b2Color :: String, b3Color :: String, b4Color :: String, clicked :: Boolean,
+                clickedBox :: Int, lastClickTime :: Number, boxPattern :: BoxPattern, delayTimer :: Timer, score :: Int, gameOver :: Boolean}
 
 widget :: forall a . MyState  -> VDom Attr a
 widget state = frameLayout
@@ -46,7 +48,6 @@ widget state = frameLayout
               , background htmlBackground
               ]
               [
-
                 linearLayout[
                    height (show boxHeight)
                    , width (show boxWidth)
@@ -82,28 +83,23 @@ widget state = frameLayout
                    , onMouseDown (Some click)
                    , margin (posToMarginStr ((parentWidth / 2) - boxWidth) (parentHeight / 2))
                  ][]
-
+                , textView[
+                    id_ "outView"
+                    , height "200"
+                    , width "500"
+                    , text $ scoreMsg state.score state.gameOver
+                    , margin (posToMarginStr 650 100)
+                    , textSize "40"
+                  ]
 
               ]
+
+scoreMsg :: Int -> Boolean -> String
+scoreMsg score gameOver = "Score : " <> (show score) <> "\n" <> if gameOver then "Game Over" else "Game on!"
 
 posToMarginStr :: Int -> Int -> String
 posToMarginStr x y = (show x) <> ", " <> (show y) <> " , 0, 0"
 
-evalBox1 s = do
-  log "box1 clicked"
-  U.getState
-
-evalBox2 s = do
-  log "box2 clicked"
-  U.getState
-
-evalBox3 s = do
-  log "box3 clicked"
-  U.getState
-
-evalBox4 s = do
-  log "box4 clicked"
-  U.getState
 
 frameUpdate x = do
   U.getState
@@ -166,33 +162,51 @@ resetBoxColor box = do
     4 -> U.updateState "b4Color" box4Color
     _ -> U.getState
 
+showState :: MyState -> String
+showState s = showTimer s.delayTimer
+
+showTimer :: Timer -> String
+showTimer t = (show t.set) <> ", " <> (show t.time) <> ", " <> (show t.duration)
+
 mOnAnim a = do
   (state::MyState) <- U.getState
-  st <- if state.clicked
-    then if (time - state.lastClickTime) > 1000.0
-      then do
-        _ <- resetBoxColor state.clickedBox
-        _ <- U.updateState "clicked" false
-        _ <- U.updateState "clickable" true
-        _ <- U.updateState "clickedBox" (-1)
-        U.updateState "lastClickTime" 0.0
-      else U.getState
-    else U.getState
-
-  if (length $ st.boxPattern.pattern) == st.boxPattern.done -- pattern already displayed to user
-    then if st.boxPattern.correctGuesses == (length st.boxPattern.pattern) -- user has guessed everything right
-      then do -- add new element into array. reset correctGuesses and done
-        newBox <- selectNextBox
-        U.updateState "boxPattern" {pattern : st.boxPattern.pattern <> [newBox], done : 0, correctGuesses : 0 }
-      else  -- look for user input. Should only get user input under this condition. basically, we're waiting for users input here
-        pure st
-    else if (not st.clicked) then do -- still more left to be displayed in pattern
-              let boxNum = unsafePartial $ fromJust $ (st.boxPattern.pattern !! st.boxPattern.done)
-              _ <- clickBox boxNum time
-              U.updateState "boxPattern" {pattern : st.boxPattern.pattern, done : (st.boxPattern.done + 1), correctGuesses : st.boxPattern.correctGuesses }
-            else pure st
-  where
-    time = a.time
+  if state.delayTimer.set
+    then if ((state.delayTimer.time + state.delayTimer.duration) <= a.time)
+          then do
+            log $ (show $ (state.delayTimer.time + state.delayTimer.duration)) <> " <= "<> (show a.time ) <> "\n After delay : " <> (showState state)
+            U.updateState "delayTimer" {set: false, time : 0.0, duration : 0.0}
+          else pure state
+    else do
+      st <- if state.clicked
+        then if (time - state.lastClickTime) > buttonPressedDispTime
+          then do
+            bReset <- resetBoxColor state.clickedBox
+            log $ showState bReset
+            tSet <- U.updateState "delayTimer" {set : true, time : a.time, duration : buttonClickDelay}
+            log $ showState tSet
+            _ <- U.updateState "clicked" false
+            _ <- U.updateState "clickable" true
+            _ <- U.updateState "clickedBox" (-1)
+            U.updateState "lastClickTime" 0.0
+          else U.getState
+        else U.getState
+      if ( (length $ st.boxPattern.pattern) == st.boxPattern.done ) && (not st.delayTimer.set)-- pattern already displayed to user
+        then if st.boxPattern.correctGuesses == (length st.boxPattern.pattern) -- user has guessed everything right
+          then do -- add new element into array. reset correctGuesses and done
+            newBox <- selectNextBox
+            nb <- U.updateState "boxPattern" {pattern : st.boxPattern.pattern <> [newBox], done : 0, correctGuesses : 0 }
+            U.updateState "score" ((length nb.boxPattern.pattern) - 1)
+          else  -- look for user input. Should only get user input under this condition. basically, we're waiting for users input here
+            pure st
+        else if (not st.clicked) && (not st.delayTimer.set)
+                then do -- still more left to be displayed in pattern
+                  let boxNum = unsafePartial $ fromJust $ (st.boxPattern.pattern !! st.boxPattern.done)
+                  log "clicking box to display pattern"
+                  _ <- clickBox boxNum time
+                  U.updateState "boxPattern" {pattern : st.boxPattern.pattern, done : (st.boxPattern.done + 1), correctGuesses : st.boxPattern.correctGuesses }
+                else pure st
+      where
+        time = a.time
 
 
 listen = do
@@ -217,6 +231,9 @@ resetState = do
   _ <- U.updateState "lastClickTime" 0.0
   firstBox <- selectNextBox
   _ <- U.updateState "boxPattern" {pattern : [firstBox], done : 0, correctGuesses : 0}
+  _ <- U.updateState "delayTimer" {set : false, time : 0.0, duration : 0.0}
+  _ <- U.updateState "score" 0
+  _ <- U.updateState "gameOver" false
   U.updateState "clickable" true  --- TODO can clickable be replaced with clicked? is clickable redundant?
 
 -- type BoxPattern = {pattern :: Array Int, done :: Int, correctGuesses :: Int}

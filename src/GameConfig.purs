@@ -2,16 +2,23 @@ module GameConfig where
 
 
 boxHeight :: Int
-boxHeight = 200
+boxHeight = 300
 
 boxWidth :: Int
-boxWidth = 200
+boxWidth = 300
 
 parentHeight :: Int
-parentHeight = 800
+parentHeight = 600
 
 parentWidth :: Int
-parentWidth = 1200
+parentWidth = 600
+
+-- delay in milliseconds
+buttonClickDelay :: Number
+buttonClickDelay = 1000.0
+
+buttonPressedDispTime :: Number
+buttonPressedDispTime = 1000.0
 
 box1Color :: String
 box1Color = "#FF9800" -- orange
