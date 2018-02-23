@@ -147,12 +147,20 @@ evalPosition val time = do
         then do -- correctGuess
           _ <- clickBox boxNum time -- click box
           U.updateState "boxPattern" {pattern : st.boxPattern.pattern, done : st.boxPattern.done , correctGuesses : (st.boxPattern.correctGuesses + 1)}
-        else pure st
+        else if (not (boxNum == -1))
+          then do
+            U.updateState "gameOver" true
+          else pure st
+
 
     else clickBox (-1) time where
   pos = unsafePartial $ fromJust $ toMaybe val.pos
 
-mOnMouseDown val = evalPosition val.value val.time
+mOnMouseDown val = do
+  (st::MyState) <- U.getState
+  if (not st.gameOver)
+    then evalPosition val.value val.time
+    else pure st
 
 resetBoxColor box = do
   case box of
@@ -170,14 +178,15 @@ showTimer t = (show t.set) <> ", " <> (show t.time) <> ", " <> (show t.duration)
 
 mOnAnim a = do
   (state::MyState) <- U.getState
-  if state.delayTimer.set
+
+  if (state.delayTimer.set) && (not state.gameOver)
     then if ((state.delayTimer.time + state.delayTimer.duration) <= a.time)
           then do
             log $ (show $ (state.delayTimer.time + state.delayTimer.duration)) <> " <= "<> (show a.time ) <> "\n After delay : " <> (showState state)
             U.updateState "delayTimer" {set: false, time : 0.0, duration : 0.0}
           else pure state
     else do
-      st <- if state.clicked
+      st <- if (state.clicked)  && (not state.gameOver)
         then if (time - state.lastClickTime) > buttonPressedDispTime
           then do
             bReset <- resetBoxColor state.clickedBox
@@ -190,7 +199,7 @@ mOnAnim a = do
             U.updateState "lastClickTime" 0.0
           else U.getState
         else U.getState
-      if ( (length $ st.boxPattern.pattern) == st.boxPattern.done ) && (not st.delayTimer.set)-- pattern already displayed to user
+      if ( (length $ st.boxPattern.pattern) == st.boxPattern.done ) && (not st.delayTimer.set) && (not state.gameOver)-- pattern already displayed to user
         then if st.boxPattern.correctGuesses == (length st.boxPattern.pattern) -- user has guessed everything right
           then do -- add new element into array. reset correctGuesses and done
             newBox <- selectNextBox
@@ -198,7 +207,7 @@ mOnAnim a = do
             U.updateState "score" ((length nb.boxPattern.pattern) - 1)
           else  -- look for user input. Should only get user input under this condition. basically, we're waiting for users input here
             pure st
-        else if (not st.clicked) && (not st.delayTimer.set)
+        else if (not st.clicked) && (not st.delayTimer.set) && (not state.gameOver)
                 then do -- still more left to be displayed in pattern
                   let boxNum = unsafePartial $ fromJust $ (st.boxPattern.pattern !! st.boxPattern.done)
                   log "clicking box to display pattern"
