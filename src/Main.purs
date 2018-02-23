@@ -88,7 +88,7 @@ widget state = frameLayout
                     , height "200"
                     , width "500"
                     , text $ scoreMsg state.score state.gameOver
-                    , margin (posToMarginStr 650 100)
+                    , margin (posToMarginStr 850 100)
                     , textSize "40"
                   ]
 
